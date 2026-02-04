@@ -26,5 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const arr = new Uint8Array(bin.length)
     for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
     return arr.buffer
-  }
+  },
+  // LM Studio API calls
+  callLMStudio: (url, options) => ipcRenderer.invoke('call-lmstudio', url, options)
 })

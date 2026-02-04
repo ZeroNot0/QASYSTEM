@@ -12,6 +12,7 @@
     "app": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env APP_DEV=1 electron .\""
   },
   "dependencies": {
+    "node-fetch": "^2.7.0",
     "screenshot-desktop": "^1.15.0",
     "tesseract.js": "^5.1.1",
     "xlsx": "^0.18.5"

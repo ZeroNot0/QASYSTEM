@@ -13,34 +13,26 @@ const TONES: { value: Tone; label: string }[] = [
 
 async function testConnection(): Promise<{ ok: boolean; error?: string }> {
   try {
-    if (!window.electronAPI?.callLMStudio) {
-      return { ok: false, error: 'electronAPI not available' }
-    }
-    
-    const result = await window.electronAPI.callLMStudio(`${LM_STUDIO_URL}/v1/models`, {
-      method: 'GET'
+    const response = await fetch(`${LM_STUDIO_URL}/v1/models`, { 
+      method: 'GET',
+      signal: AbortSignal.timeout(3000) 
     })
-    
-    if (!result.ok) {
-      return { ok: false, error: result.error || `Server error ${result.status}` }
-    }
-    
+    if (!response.ok) return { ok: false, error: `Server error ${response.status}` }
     return { ok: true }
   } catch (err: any) {
-    return { ok: false, error: `Cannot connect: ${err.message}` }
+    if (err.name === 'TimeoutError') {
+      return { ok: false, error: 'LM Studio connection timeout' }
+    }
+    return { ok: false, error: `Cannot connect to ${LM_STUDIO_URL}` }
   }
 }
 
 async function recognizeWithLMStudio(base64Image: string): Promise<string> {
   try {
-    if (!window.electronAPI?.callLMStudio) {
-      throw new Error('electronAPI not available')
-    }
-    
-    const result = await window.electronAPI.callLMStudio(`${LM_STUDIO_URL}/v1/chat/completions`, {
+    const response = await fetch(`${LM_STUDIO_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: {
+      body: JSON.stringify({
         model: OCR_MODEL,
         messages: [
           {
@@ -53,17 +45,20 @@ async function recognizeWithLMStudio(base64Image: string): Promise<string> {
         ],
         temperature: 0.1,
         max_tokens: 2000
-      }
+      })
     })
     
-    if (!result.ok) {
-      const errorText = result.error || result.data?.error?.message || ''
-      throw new Error(`OCR failed (${result.status}): ${errorText}`)
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`OCR failed (${response.status}): ${errorText || response.statusText}`)
     }
-    
-    return result.data.choices?.[0]?.message?.content || ''
+    const data = await response.json()
+    return data.choices?.[0]?.message?.content || ''
   } catch (err: any) {
-    throw new Error(`Cannot connect to LM Studio at ${LM_STUDIO_URL}. Please ensure:\n1. LM Studio is running\n2. Port is set to 1234\n3. Model ${OCR_MODEL} is loaded`)
+    if (err.message.includes('fetch')) {
+      throw new Error(`Cannot connect to LM Studio at ${LM_STUDIO_URL}. Please ensure:\n1. LM Studio is running\n2. Port is set to 1234\n3. Model ${OCR_MODEL} is loaded`)
+    }
+    throw err
   }
 }
 
@@ -83,29 +78,28 @@ Requirements: ${toneDesc[tone]}, accurate and professional.
 Output only the Japanese translation without explanation.`
 
   try {
-    if (!window.electronAPI?.callLMStudio) {
-      throw new Error('electronAPI not available')
-    }
-    
-    const result = await window.electronAPI.callLMStudio(`${LM_STUDIO_URL}/v1/chat/completions`, {
+    const response = await fetch(`${LM_STUDIO_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: {
+      body: JSON.stringify({
         model: OCR_MODEL,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
         max_tokens: 1000
-      }
+      })
     })
     
-    if (!result.ok) {
-      const errorText = result.error || result.data?.error?.message || ''
-      throw new Error(`Translation failed (${result.status}): ${errorText}`)
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`Translation failed (${response.status}): ${errorText || response.statusText}`)
     }
-    
-    return result.data.choices?.[0]?.message?.content || ''
+    const data = await response.json()
+    return data.choices?.[0]?.message?.content || ''
   } catch (err: any) {
-    throw new Error('Cannot connect to LM Studio')
+    if (err.message.includes('fetch')) {
+      throw new Error('Cannot connect to LM Studio')
+    }
+    throw err
   }
 }
 

@@ -43,7 +43,8 @@ const createMainWindow = () => {
     }
   })
   if (isDev) {
-    win.loadURL('http://localhost:5173')
+    const port = process.env.VITE_PORT || '5173'
+    win.loadURL(`http://localhost:${port}`)
     win.webContents.openDevTools({ mode: 'detach' })
   } else {
     win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'))
@@ -183,5 +184,41 @@ ipcMain.handle('read-file-buffer', (_, filePath) => {
     return buf.toString('base64')
   } catch {
     return null
+  }
+})
+
+// LM Studio API proxy
+ipcMain.handle('call-lmstudio', async (_, url, options) => {
+  try {
+    const fetch = require('node-fetch')
+    
+    const fetchOptions = {
+      method: options.method || 'GET',
+      headers: options.headers || {}
+    }
+    
+    if (options.body) {
+      fetchOptions.body = JSON.stringify(options.body)
+    }
+    
+    console.log('Calling LM Studio:', url, fetchOptions)
+    
+    const response = await fetch(url, fetchOptions)
+    const data = await response.json()
+    
+    console.log('LM Studio response:', { ok: response.ok, status: response.status, data })
+    
+    return {
+      ok: response.ok,
+      status: response.status,
+      data: data
+    }
+  } catch (error) {
+    console.error('LM Studio call error:', error)
+    return {
+      ok: false,
+      status: 0,
+      error: error.message
+    }
   }
 })

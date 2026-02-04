@@ -4,16 +4,129 @@
   <meta charset="UTF-8">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { overflow: hidden; background: #000; cursor: crosshair; }
-    #img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
-    #box { position: fixed; border: 2px solid #0af; background: rgba(0,170,255,0.1); pointer-events: none; }
-    #hint { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); color: #fff; background: rgba(0,0,0,0.7); padding: 8px 16px; border-radius: 8px; font-family: sans-serif; }
+    body { 
+      overflow: hidden; 
+      background: #000; 
+      cursor: crosshair;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #img { 
+      display: block; 
+      max-width: 100%; 
+      max-height: 100%; 
+      object-fit: contain; 
+      user-select: none; 
+    }
+    /* 遮罩层 */
+    #mask {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+    /* 选区框 */
+    #box { 
+      position: fixed; 
+      border: 2px solid #00d4ff;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.6), 
+                  0 0 10px rgba(0,212,255,0.8),
+                  inset 0 0 0 1px rgba(255,255,255,0.3);
+      pointer-events: none;
+      z-index: 20;
+      transition: box-shadow 0.15s ease;
+    }
+    /* 尺寸显示 */
+    #size-info {
+      position: fixed;
+      background: rgba(0,212,255,0.95);
+      color: #000;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      pointer-events: none;
+      z-index: 30;
+      display: none;
+    }
+    /* 操作提示 */
+    #hint { 
+      position: fixed; 
+      bottom: 20px; 
+      left: 50%; 
+      transform: translateX(-50%); 
+      color: #fff; 
+      background: rgba(0,0,0,0.8); 
+      padding: 12px 24px; 
+      border-radius: 8px; 
+      font-size: 14px;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    #hint span {
+      color: #00d4ff;
+      font-weight: 600;
+    }
+    /* 确认按钮 */
+    #actions {
+      position: fixed;
+      display: none;
+      gap: 8px;
+      z-index: 40;
+      pointer-events: all;
+    }
+    #actions button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #actions .confirm {
+      background: #00d4ff;
+      color: #000;
+    }
+    #actions .confirm:hover {
+      background: #00b8e6;
+      transform: translateY(-1px);
+    }
+    #actions .cancel {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    #actions .cancel:hover {
+      background: rgba(255,255,255,0.2);
+    }
   </style>
 </head>
 <body>
-  <img id="img" alt="screen" />
+  <div id="container">
+    <img id="img" alt="screen" />
+  </div>
+  <div id="mask"></div>
   <div id="box" style="display:none;"></div>
-  <div id="hint">拖拽框选区域，松开确认；按 Esc 取消</div>
+  <div id="size-info"></div>
+  <div id="actions">
+    <button class="confirm" onclick="confirmSelection()">✓ 确认</button>
+    <button class="cancel" onclick="cancelSelection()">✗ 重选</button>
+  </div>
+  <div id="hint">
+    <span>拖拽</span>框选区域 | <span>Esc</span>取消 | <span>Enter</span>确认
+  </div>
   <script src="crop.js"></script>
 </body>
 </html>
