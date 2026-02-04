@@ -3,12 +3,14 @@ const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const { spawnSync } = require('child_process')
+const MonitorManager = require('./monitor')
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.APP_DEV === '1'
 const isMac = process.platform === 'darwin'
 
 let mainWindow = null
 let cropWindow = null
+let monitorManager = null
 
 const getApiKeyPath = () => {
   const base = app.isPackaged ? process.resourcesPath : process.cwd()
@@ -221,4 +223,27 @@ ipcMain.handle('call-lmstudio', async (_, url, options) => {
       error: error.message
     }
   }
+})
+
+// 监控系统 IPC handlers
+ipcMain.handle('select-monitor-area', async () => {
+  if (!monitorManager) {
+    monitorManager = new MonitorManager(mainWindow)
+  }
+  return await monitorManager.selectArea()
+})
+
+ipcMain.handle('start-monitor', async (event, config) => {
+  if (!monitorManager) {
+    monitorManager = new MonitorManager(mainWindow)
+  }
+  await monitorManager.startMonitor(config)
+  return { success: true }
+})
+
+ipcMain.handle('stop-monitor', async () => {
+  if (monitorManager) {
+    monitorManager.stopMonitor()
+  }
+  return { success: true }
 })

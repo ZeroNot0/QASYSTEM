@@ -3,37 +3,13 @@ let startX = 0, startY = 0;
 let selection = null;
 let sizeInfo = null;
 let hint = null;
-let screenshot = null;
-let overlay = null;
-let isMonitorMode = false; // 监控模式标志
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('Crop tool loaded');
+  console.log('Crop tool loaded - transparent overlay mode');
   
-  screenshot = document.getElementById('screenshot');
-  overlay = document.getElementById('overlay');
   selection = document.getElementById('selection');
   sizeInfo = document.getElementById('size-info');
   hint = document.getElementById('hint');
-
-  // 监听截图数据（用于Alt+Q模式）
-  if (window.cropAPI && window.cropAPI.onScreenshotData) {
-    window.cropAPI.onScreenshotData((base64) => {
-      console.log('Screenshot data received');
-      if (screenshot) {
-        screenshot.src = 'data:image/png;base64,' + base64;
-        if (overlay) overlay.style.display = 'block';
-      }
-    });
-  }
-
-  // 监听模式设置（用于监控模式）
-  if (window.cropAPI && window.cropAPI.onSetMode) {
-    window.cropAPI.onSetMode((mode) => {
-      console.log('Mode set to:', mode);
-      isMonitorMode = (mode === 'monitor');
-    });
-  }
 
   // 鼠标按下开始选择
   document.addEventListener('mousedown', (e) => {
@@ -117,45 +93,16 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // 裁剪screenshot图片（OCR模式）或发送区域坐标（监控模式）
-    if (isMonitorMode) {
-      console.log('Monitor mode: sending area coordinates');
-      const areaData = {
-        x: Math.round(x),
-        y: Math.round(y),
-        width: Math.round(width),
-        height: Math.round(height)
-      };
-      window.cropAPI.confirm(areaData);
-    } else if (screenshot && screenshot.complete) {
-      console.log('OCR mode: cropping screenshot image');
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(width);
-      canvas.height = Math.round(height);
-      const ctx = canvas.getContext('2d');
-      
-      // 从screenshot图片裁剪选中区域
-      ctx.drawImage(
-        screenshot,
-        Math.round(x), Math.round(y), Math.round(width), Math.round(height),
-        0, 0, Math.round(width), Math.round(height)
-      );
-      
-      // 转换为base64
-      const croppedBase64 = canvas.toDataURL('image/png').split(',')[1];
-      console.log('Cropped image base64 length:', croppedBase64.length);
-      window.cropAPI.confirm(croppedBase64);
-    } else {
-      console.log('No screenshot image and not monitor mode');
-      // 如果没有screenshot也不是监控模式，发送区域坐标
-      const areaData = {
-        x: Math.round(x),
-        y: Math.round(y),
-        width: Math.round(width),
-        height: Math.round(height)
-      };
-      window.cropAPI.confirm(areaData);
-    }
+    // 确认选区
+    const areaData = {
+      x: Math.round(x),
+      y: Math.round(y),
+      width: Math.round(width),
+      height: Math.round(height)
+    };
+
+    console.log('Confirming area:', areaData);
+    window.cropAPI.confirm(areaData);
   });
 
   // ESC 取消

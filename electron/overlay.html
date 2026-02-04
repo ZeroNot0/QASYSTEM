@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; }
+    body { 
+      overflow: hidden; 
+      background: transparent;
+    }
+    #border {
+      position: fixed;
+      border: 3px solid #ff0000;
+      box-shadow: 0 0 10px rgba(255, 0, 0, 0.8),
+                  inset 0 0 10px rgba(255, 0, 0, 0.3);
+      pointer-events: none;
+    }
+    #label {
+      position: fixed;
+      top: 0;
+      left: 0;
+      background: rgba(255, 0, 0, 0.9);
+      color: white;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-family: monospace;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="border"></div>
+  <div id="label">MONITORING AREA</div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    ipcRenderer.on('set-bounds', (_, bounds) => {
+      const border = document.getElementById('border');
+      const label = document.getElementById('label');
+      
+      border.style.left = bounds.x + 'px';
+      border.style.top = bounds.y + 'px';
+      border.style.width = bounds.width + 'px';
+      border.style.height = bounds.height + 'px';
+      
+      label.style.left = bounds.x + 'px';
+      label.style.top = (bounds.y - 25) + 'px';
+    });
+  </script>
+</body>
+</html>

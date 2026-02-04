@@ -16,5 +16,11 @@ interface Window {
       data?: any
       error?: string
     }>
+    // Monitor API
+    selectMonitorArea: () => Promise<{ x: number; y: number; width: number; height: number } | null>
+    startMonitor: (config: any) => Promise<{ success: boolean }>
+    stopMonitor: () => Promise<{ success: boolean }>
+    onMonitorMessage?: (callback: (message: any) => void) => void
+    onMonitorStats?: (callback: (stats: any) => void) => void
   }
 }

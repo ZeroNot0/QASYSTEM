@@ -28,5 +28,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return arr.buffer
   },
   // LM Studio API calls
-  callLMStudio: (url, options) => ipcRenderer.invoke('call-lmstudio', url, options)
+  callLMStudio: (url, options) => ipcRenderer.invoke('call-lmstudio', url, options),
+  
+  // Monitor API
+  selectMonitorArea: () => ipcRenderer.invoke('select-monitor-area'),
+  startMonitor: (config) => ipcRenderer.invoke('start-monitor', config),
+  stopMonitor: () => ipcRenderer.invoke('stop-monitor'),
+  onMonitorMessage: (callback) => {
+    const fn = (_, data) => callback(data)
+    ipcRenderer.on('monitor-message', fn)
+    return () => ipcRenderer.removeListener('monitor-message', fn)
+  },
+  onMonitorStats: (callback) => {
+    const fn = (_, data) => callback(data)
+    ipcRenderer.on('monitor-stats', fn)
+    return () => ipcRenderer.removeListener('monitor-stats', fn)
+  }
 })
