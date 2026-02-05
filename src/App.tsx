@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import MonitorPanel from './components/MonitorPanel'
 
-const LM_STUDIO_URL = 'http://localhost:1234'
+const LM_STUDIO_URL = 'http://127.0.0.1:1234'
 const OCR_MODEL = 'allenai/olmocr-2-7b'
 
 type Tone = 'polite' | 'formal' | 'casual'
@@ -12,6 +12,43 @@ const TONES: { value: Tone; label: string }[] = [
   { value: 'formal', label: 'Formal' },
   { value: 'casual', label: 'Casual' }
 ]
+
+/** 压缩图片再发给 LM Studio，避免 "failed to process image"（尺寸/体积过大） */
+const OCR_MAX_WIDTH = 1280
+const OCR_JPEG_QUALITY = 0.88
+
+function compressImageForOCR(base64Image: string, mime: 'image/png' | 'image/jpeg' = 'image/png'): Promise<{ base64: string; mime: string }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      const scale = w > OCR_MAX_WIDTH ? OCR_MAX_WIDTH / w : 1
+      const cw = Math.round(w * scale)
+      const ch = Math.round(h * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = cw
+      canvas.height = ch
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        resolve({ base64: base64Image, mime: mime })
+        return
+      }
+      ctx.drawImage(img, 0, 0, cw, ch)
+      const outMime = 'image/jpeg'
+      const dataUrl = canvas.toDataURL(outMime, OCR_JPEG_QUALITY)
+      const outBase64 = dataUrl.split(',')[1]
+      if (!outBase64) {
+        resolve({ base64: base64Image, mime: mime })
+        return
+      }
+      resolve({ base64: outBase64, mime: outMime })
+    }
+    img.onerror = () => reject(new Error('Failed to load image for compression'))
+    img.src = `data:${mime};base64,${base64Image}`
+  })
+}
 
 async function testConnection(): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -38,7 +75,10 @@ async function recognizeWithLMStudio(base64Image: string): Promise<string> {
     if (!window.electronAPI?.callLMStudio) {
       throw new Error('electronAPI not available')
     }
-    
+
+    const { base64: compressed, mime } = await compressImageForOCR(base64Image)
+    const dataUrl = `data:${mime};base64,${compressed}`
+
     const result = await window.electronAPI.callLMStudio(`${LM_STUDIO_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -49,7 +89,7 @@ async function recognizeWithLMStudio(base64Image: string): Promise<string> {
             role: 'user',
             content: [
               { type: 'text', text: 'Please recognize Japanese text in the image. Output only the recognized text without any explanation.' },
-              { type: 'image_url', image_url: { url: `data:image/png;base64,${base64Image}` } }
+              { type: 'image_url', image_url: { url: dataUrl } }
             ]
           }
         ],
@@ -59,13 +99,25 @@ async function recognizeWithLMStudio(base64Image: string): Promise<string> {
     })
     
     if (!result.ok) {
-      const errorText = result.error || result.data?.error?.message || ''
-      throw new Error(`OCR failed (${result.status}): ${errorText}`)
+      const errorText = result.error || result.data?.error?.message || String(result.data?.error || '')
+      const msg = errorText.trim() || `HTTP ${result.status}`
+      throw new Error(`OCR failed (${result.status}): ${msg}`)
     }
-    
-    return result.data.choices?.[0]?.message?.content || ''
+
+    const text = result.data?.choices?.[0]?.message?.content
+    if (text === undefined || text === null) {
+      throw new Error('OCR returned no text. Check that the model supports vision (image) input.')
+    }
+    return text
   } catch (err: any) {
-    throw new Error(`Cannot connect to LM Studio at ${LM_STUDIO_URL}. Please ensure:\n1. LM Studio is running\n2. Port is set to 1234\n3. Model ${OCR_MODEL} is loaded`)
+    const msg = err?.message || String(err)
+    if (msg.startsWith('OCR failed') || msg.includes('returned no text')) {
+      throw err
+    }
+    const hint = msg.includes('ECONNREFUSED') || msg.includes('fetch')
+      ? `Cannot connect to LM Studio at ${LM_STUDIO_URL}. Please ensure:\n1. LM Studio is running\n2. Port is set to 1234\n3. Model ${OCR_MODEL} is loaded`
+      : `LM Studio error: ${msg}`
+    throw new Error(hint)
   }
 }
 
@@ -101,13 +153,14 @@ Output only the Japanese translation without explanation.`
     })
     
     if (!result.ok) {
-      const errorText = result.error || result.data?.error?.message || ''
-      throw new Error(`Translation failed (${result.status}): ${errorText}`)
+      const errorText = result.error || result.data?.error?.message || String(result.data?.error || '')
+      throw new Error(`Translation failed (${result.status}): ${errorText.trim() || result.status}`)
     }
-    
-    return result.data.choices?.[0]?.message?.content || ''
+    return result.data.choices?.[0]?.message?.content ?? ''
   } catch (err: any) {
-    throw new Error('Cannot connect to LM Studio')
+    const msg = err?.message || String(err)
+    if (msg.startsWith('Translation failed')) throw err
+    throw new Error(msg.includes('ECONNREFUSED') || msg.includes('fetch') ? 'Cannot connect to LM Studio' : `LM Studio: ${msg}`)
   }
 }
 

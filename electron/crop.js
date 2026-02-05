@@ -16,14 +16,16 @@ document.addEventListener('DOMContentLoaded', () => {
   sizeInfo = document.getElementById('size-info');
   hint = document.getElementById('hint');
 
-  // 监听截图数据（用于Alt+Q模式）
+  if (!screenshot || !selection) {
+    console.error('Crop: missing #screenshot or #selection');
+    return;
+  }
+
   if (window.cropAPI && window.cropAPI.onScreenshotData) {
     window.cropAPI.onScreenshotData((base64) => {
-      console.log('Screenshot data received');
-      if (screenshot) {
-        screenshot.src = 'data:image/png;base64,' + base64;
-        if (overlay) overlay.style.display = 'block';
-      }
+      console.log('Screenshot data received, length:', (base64 && base64.length) || 0);
+      screenshot.src = 'data:image/png;base64,' + base64;
+      if (overlay) overlay.style.display = 'block';
     });
   }
 
@@ -35,20 +37,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 鼠标按下开始选择
   document.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !selection) return;
     
     isSelecting = true;
     startX = e.clientX;
     startY = e.clientY;
     
-    console.log('Selection started at:', startX, startY);
-    
-    // 隐藏提示
     if (hint) hint.style.display = 'none';
     
-    // 重置选择框
     selection.style.left = startX + 'px';
     selection.style.top = startY + 'px';
     selection.style.width = '0px';
@@ -57,9 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
     sizeInfo.style.display = 'none';
   });
 
-  // 鼠标移动绘制选择框
   document.addEventListener('mousemove', (e) => {
-    if (!isSelecting) return;
+    if (!isSelecting || !selection || !sizeInfo) return;
 
     const currentX = e.clientX;
     const currentY = e.clientY;
@@ -96,9 +92,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 鼠标释放完成选择
   document.addEventListener('mouseup', (e) => {
-    if (!isSelecting || e.button !== 0) return;
+    if (!isSelecting || e.button !== 0 || !window.cropAPI || !window.cropAPI.confirm) return;
 
     const currentX = e.clientX;
     const currentY = e.clientY;
@@ -108,23 +103,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const width = Math.abs(currentX - startX);
     const height = Math.abs(currentY - startY);
 
-    console.log('Selection completed:', { x, y, width, height });
-
-    // 验证选区大小
     if (width < 10 || height < 10) {
-      console.log('Selection too small, resetting');
       resetSelection();
       return;
     }
 
-    // 裁剪screenshot图片（OCR模式）或发送区域坐标（监控模式）
     if (isMonitorMode) {
-      console.log('Monitor mode: sending area coordinates');
+      const nw = screenshot.naturalWidth || window.innerWidth;
+      const nh = screenshot.naturalHeight || window.innerHeight;
+      const scale = Math.min(window.innerWidth / nw, window.innerHeight / nh) || 1;
+      const displayedW = nw * scale;
+      const displayedH = nh * scale;
+      const offsetX = (window.innerWidth - displayedW) / 2;
+      const offsetY = (window.innerHeight - displayedH) / 2;
+      const imgX = Math.max(0, Math.min(nw, (x - offsetX) / scale));
+      const imgY = Math.max(0, Math.min(nh, (y - offsetY) / scale));
+      const imgW = Math.max(1, Math.min(nw - imgX, width / scale));
+      const imgH = Math.max(1, Math.min(nh - imgY, height / scale));
       const areaData = {
-        x: Math.round(x),
-        y: Math.round(y),
-        width: Math.round(width),
-        height: Math.round(height)
+        x: Math.round(imgX),
+        y: Math.round(imgY),
+        width: Math.round(imgW),
+        height: Math.round(imgH)
       };
       window.cropAPI.confirm(areaData);
     } else if (screenshot && screenshot.complete) {

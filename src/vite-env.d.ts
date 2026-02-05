@@ -17,10 +17,12 @@ interface Window {
       error?: string
     }>
     // Monitor API
-    selectMonitorArea: () => Promise<{ x: number; y: number; width: number; height: number } | null>
+    startMonitorAreaSelection: () => Promise<unknown>
+    onMonitorAreaSelected: (callback: (area: { x: number; y: number; width: number; height: number }) => void) => (() => void) | undefined
     startMonitor: (config: any) => Promise<{ success: boolean }>
     stopMonitor: () => Promise<{ success: boolean }>
     onMonitorMessage?: (callback: (message: any) => void) => void
     onMonitorStats?: (callback: (stats: any) => void) => void
+    onMonitorScreenshot?: (callback: (data: { thumbnailBase64: string; time: string }) => void) => (() => void) | undefined
   }
 }

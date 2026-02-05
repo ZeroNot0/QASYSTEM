@@ -30,8 +30,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LM Studio API calls
   callLMStudio: (url, options) => ipcRenderer.invoke('call-lmstudio', url, options),
   
-  // Monitor API
-  selectMonitorArea: () => ipcRenderer.invoke('select-monitor-area'),
+  // Monitor API（框选复用与 OCR 相同的 crop 窗口）
+  startMonitorAreaSelection: () => ipcRenderer.invoke('start-monitor-area-selection'),
+  onMonitorAreaSelected: (callback) => {
+    const fn = (_, area) => callback(area)
+    ipcRenderer.on('monitor-area-selected', fn)
+    return () => ipcRenderer.removeListener('monitor-area-selected', fn)
+  },
   startMonitor: (config) => ipcRenderer.invoke('start-monitor', config),
   stopMonitor: () => ipcRenderer.invoke('stop-monitor'),
   onMonitorMessage: (callback) => {
@@ -43,5 +48,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const fn = (_, data) => callback(data)
     ipcRenderer.on('monitor-stats', fn)
     return () => ipcRenderer.removeListener('monitor-stats', fn)
+  },
+  onMonitorScreenshot: (callback) => {
+    const fn = (_, data) => callback(data)
+    ipcRenderer.on('monitor-screenshot', fn)
+    return () => ipcRenderer.removeListener('monitor-screenshot', fn)
+  },
+  onMonitorExcelReady: (callback) => {
+    const fn = (_, data) => callback(data)
+    ipcRenderer.on('monitor-excel-ready', fn)
+    return () => ipcRenderer.removeListener('monitor-excel-ready', fn)
+  },
+  onMonitorStopped: (callback) => {
+    const fn = (_, data) => callback(data)
+    ipcRenderer.on('monitor-stopped', fn)
+    return () => ipcRenderer.removeListener('monitor-stopped', fn)
   }
 })

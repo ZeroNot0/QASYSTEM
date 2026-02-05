@@ -54,7 +54,35 @@ const createMainWindow = () => {
   mainWindow = win
 }
 
-const createCropWindow = (imageBase64) => {
+/** 全屏截图用于 crop 窗口（与 OCR 框选同一套流程）：Mac 用 screencapture，Win 用 screenshot-desktop */
+async function captureFullScreenForCrop () {
+  if (isMac) {
+    const tmpPath = path.join(os.tmpdir(), `jplinker_crop_${Date.now()}.png`)
+    if (mainWindow) mainWindow.hide()
+    const result = spawnSync('screencapture', ['-x', tmpPath], { stdio: 'inherit', shell: false })
+    if (mainWindow) mainWindow.show()
+    if (result.status !== 0 || !fs.existsSync(tmpPath)) {
+      try { fs.unlinkSync(tmpPath) } catch {}
+      return null
+    }
+    try {
+      const base64 = fs.readFileSync(tmpPath).toString('base64')
+      return base64
+    } finally {
+      try { fs.unlinkSync(tmpPath) } catch {}
+    }
+  }
+  try {
+    const screenshot = require('screenshot-desktop')
+    const img = await screenshot({ format: 'png' })
+    return img.toString('base64')
+  } catch (e) {
+    console.error('captureFullScreenForCrop error:', e)
+    return null
+  }
+}
+
+const createCropWindow = (imageBase64, mode = 'ocr') => {
   if (cropWindow) {
     cropWindow.close()
     cropWindow = null
@@ -75,6 +103,7 @@ const createCropWindow = (imageBase64) => {
   })
   cropWindow.loadFile(path.join(__dirname, 'crop.html'))
   cropWindow.webContents.on('did-finish-load', () => {
+    if (mode === 'monitor') cropWindow.webContents.send('set-mode', 'monitor')
     cropWindow.webContents.send('screenshot-data', imageBase64)
   })
   cropWindow.on('closed', () => { cropWindow = null })
@@ -124,6 +153,15 @@ function pasteClipboardImage () {
 
 app.whenReady().then(() => {
   createMainWindow()
+
+  // 框选区域：与 OCR 同一套 crop 窗口，必须在 app ready 后注册
+  ipcMain.handle('start-monitor-area-selection', async () => {
+    const base64 = await captureFullScreenForCrop()
+    if (!base64) return null
+    createCropWindow(base64, 'monitor')
+    return {}
+  })
+
   globalShortcut.register('Alt+Q', () => {
     if (isMac) {
       captureMac()
@@ -132,7 +170,7 @@ app.whenReady().then(() => {
         const screenshot = require('screenshot-desktop')
         screenshot({ format: 'png' }).then(img => {
           const base64 = img.toString('base64')
-          createCropWindow(base64)
+          createCropWindow(base64, 'ocr')
         }).catch(e => {
           if (mainWindow) mainWindow.webContents.send('screenshot-error', e.message)
         })
@@ -156,9 +194,16 @@ app.on('window-all-closed', () => {
 ipcMain.handle('get-api-key', () => readApiKey())
 ipcMain.handle('get-api-key-path', () => getApiKeyPath())
 
-ipcMain.on('screenshot-selected', (_, base64) => {
-  if (cropWindow) cropWindow.close()
-  if (mainWindow) mainWindow.webContents.send('screenshot-result', base64)
+ipcMain.on('screenshot-selected', (event, data) => {
+  if (typeof data === 'string') {
+    if (cropWindow) { cropWindow.close(); cropWindow = null }
+    if (mainWindow) mainWindow.webContents.send('screenshot-result', data)
+    return
+  }
+  if (typeof data === 'object' && data != null && 'x' in data) {
+    if (cropWindow) { cropWindow.close(); cropWindow = null }
+    if (mainWindow) mainWindow.webContents.send('monitor-area-selected', data)
+  }
 })
 
 ipcMain.on('screenshot-cancel', () => {
@@ -226,13 +271,6 @@ ipcMain.handle('call-lmstudio', async (_, url, options) => {
 })
 
 // 监控系统 IPC handlers
-ipcMain.handle('select-monitor-area', async () => {
-  if (!monitorManager) {
-    monitorManager = new MonitorManager(mainWindow)
-  }
-  return await monitorManager.selectArea()
-})
-
 ipcMain.handle('start-monitor', async (event, config) => {
   if (!monitorManager) {
     monitorManager = new MonitorManager(mainWindow)
