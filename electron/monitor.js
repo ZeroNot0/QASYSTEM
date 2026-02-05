@@ -41,12 +41,18 @@ class MonitorManager {
     this.nextAlertId = 1;
     this.overlayWindow = null;
     this.seenMessageKeys = new Set(); // 去重：发言玩家+发言时间+发言内容 均相同则不再入库
+    this.alertSentKeys = new Set();   // 告警去重：同玩家+同时间+同内容只发一封邮件
     this.initDatabase();
+  }
+
+  /** 规范化字符串（去首尾、多空格压成单空格），便于去重 */
+  normalizeForDedup(s) {
+    return String(s || '').trim().replace(/\s+/g, ' ');
   }
 
   /** 生成去重 key：玩家|时间|内容 */
   messageDedupKey(nickname, messageTime, content) {
-    return `${String(nickname).trim()}|${String(messageTime).trim()}|${String(content).trim()}`;
+    return `${this.normalizeForDedup(nickname)}|${this.normalizeForDedup(messageTime)}|${this.normalizeForDedup(content)}`;
   }
 
   /** LLM 归类：讨论主题 + 谈论情绪，返回 { topic, sentiment } */
@@ -366,38 +372,47 @@ Message: ${content.slice(0, 500)}`;
 
       const newRecords = [];
 
-      for (const msg of messages) {
-        const key = this.messageDedupKey(msg.nickname, msg.messageTime, msg.content);
-        if (this.seenMessageKeys.has(key)) continue;
-        this.seenMessageKeys.add(key);
+      try {
+        for (const msg of messages) {
+          const key = this.messageDedupKey(msg.nickname, msg.messageTime, msg.content);
+          if (this.seenMessageKeys.has(key)) continue;
+          this.seenMessageKeys.add(key);
 
-        const { topic, sentiment } = await this.classifyMessage(msg.content);
-        const isAlert = sentiment === '消极';
-        const record = {
-          ...msg,
-          topic,
-          sentiment,
-          isAlert
-        };
+          const { topic, sentiment } = await this.classifyMessage(msg.content);
+          const isAlert = sentiment === '消极';
+          const record = {
+            ...msg,
+            topic,
+            sentiment,
+            isAlert
+          };
 
-        const msgId = this.saveMessage(record, screenshotPath);
-        newRecords.push({ id: msgId, ...record });
+          const msgId = this.saveMessage(record, screenshotPath);
+          const extractedAt = record.extractedAt || new Date().toLocaleString('zh-CN');
+          newRecords.push({ id: msgId, ...record, extractedAt });
 
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('monitor-message', {
-            id: msgId,
-            ...record
-          });
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('monitor-message', {
+              id: msgId,
+              ...record
+            });
+          }
+
+          if (isAlert) {
+            await this.handleAlert(msgId, record);
+            const alertKey = this.messageDedupKey(record.nickname, record.messageTime, record.content);
+            if (!this.alertSentKeys.has(alertKey)) {
+              this.alertSentKeys.add(alertKey);
+              await this.sendAlertEmail(msgId, record);
+            } else {
+              console.log('Duplicate alert skipped (same player+time+content):', alertKey.slice(0, 60));
+            }
+          }
         }
-
-        if (isAlert) {
-          await this.handleAlert(msgId, record);
-          await this.sendAlertEmail(msgId, record);
+      } finally {
+        if (newRecords.length > 0) {
+          await this.appendToHourlyExcel(newRecords, now, screenshotPath);
         }
-      }
-
-      if (newRecords.length > 0) {
-        await this.appendToHourlyExcel(newRecords, now, screenshotPath);
       }
 
     } catch (error) {
@@ -581,24 +596,32 @@ Message: ${content.slice(0, 500)}`;
   async appendToHourlyExcel(records, now, screenshotPath) {
     if (!records || records.length === 0) return;
     const filepath = this.getHourlyExcelPath(now);
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filepath);
-    const sheet = workbook.getWorksheet('消息记录') || workbook.addWorksheet('消息记录');
+    try {
+      const workbook = new ExcelJS.Workbook();
+      if (!fs.existsSync(filepath)) {
+        await this.ensureHourlySheetExists(now);
+      }
+      await workbook.xlsx.readFile(filepath);
+      const sheet = workbook.getWorksheet('消息记录') || workbook.addWorksheet('消息记录');
 
-    for (const r of records) {
-      sheet.addRow({
-        id: r.id,
-        nickname: r.nickname,
-        messageTime: r.messageTime,
-        content: r.content,
-        topic: r.topic,
-        sentiment: r.sentiment,
-        isAlert: r.isAlert ? '是' : '否',
-        extractedAt: r.extractedAt,
-        screenshotPath
-      });
+      for (const r of records) {
+        sheet.addRow({
+          id: r.id,
+          nickname: r.nickname,
+          messageTime: r.messageTime,
+          content: r.content,
+          topic: r.topic,
+          sentiment: r.sentiment,
+          isAlert: r.isAlert ? '是' : '否',
+          extractedAt: r.extractedAt || new Date().toLocaleString('zh-CN'),
+          screenshotPath
+        });
+      }
+      await workbook.xlsx.writeFile(filepath);
+      console.log('Excel 已写入:', filepath, '新增', records.length, '条');
+    } catch (err) {
+      console.error('Excel 写入失败:', filepath, err);
     }
-    await workbook.xlsx.writeFile(filepath);
   }
 
   async handleAlert(messageId, message) {

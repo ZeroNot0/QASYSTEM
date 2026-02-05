@@ -37,13 +37,13 @@ export default function MonitorPanel() {
     area: null,
     alertKeywords: ['BUG', 'bug', '不行', '问题', 'エラー', 'バグ'],
     email: {
-      enabled: false,
-      smtpHost: '',
-      smtpPort: '587',
-      smtpUser: '',
-      smtpPass: '',
-      from: '',
-      to: ''
+      enabled: true,
+      smtpHost: 'smtp.yeah.net',
+      smtpPort: '465',
+      smtpUser: 'broiswatchingu@yeah.net',
+      smtpPass: 'AAaH8saYyBPX5CAh',
+      from: 'broiswatchingu@yeah.net',
+      to: 'a40793171@163.com'
     }
   });
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
@@ -248,7 +248,7 @@ export default function MonitorPanel() {
               </div>
               <div className="text-xs text-gray-500 border-t pt-2 mt-2 space-y-1">
                 <p><strong>推荐：</strong>单独注册一个邮箱专门发告警，不暴露主邮箱；密码处填该邮箱的<strong>授权码/应用专用密码</strong>（不是登录密码）。</p>
-                <p><strong>常见 SMTP：</strong>QQ 邮箱 smtp.qq.com:465；163 邮箱 smtp.163.com:465；Gmail smtp.gmail.com:587（需开启「应用专用密码」）。</p>
+                <p><strong>常见 SMTP：</strong>QQ 邮箱 smtp.qq.com:465；163 邮箱 smtp.163.com:465；<strong>yeah.net 用 smtp.yeah.net:465</strong>；Gmail smtp.gmail.com:587（需开启「应用专用密码」）。</p>
               </div>
             </div>
           )}
